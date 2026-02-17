@@ -181,7 +181,7 @@ export async function getTrendingBooks() {
 
   const disk = readDiskCache()
   const diskTrending = disk.trending
-  if (diskTrending && Date.now() - diskTrending.updatedAt < TTL.trending) {
+  if (diskTrending && diskTrending.data?.length && Date.now() - diskTrending.updatedAt < TTL.trending) {
     cacheSet(key, diskTrending.data, TTL.trending)
     return diskTrending.data
   }
