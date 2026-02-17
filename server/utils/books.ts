@@ -186,15 +186,21 @@ export async function getTrendingBooks() {
     return diskTrending.data
   }
 
-  const j: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 5000 })
-  const result = await normalizeItems(j.works || [])
+  try {
+    const j: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 5000 })
+    const result = await normalizeItems(j.works || [])
 
-  cacheSet(key, result, TTL.trending)
-  disk.trending = { updatedAt: Date.now(), data: result }
-  disk.updatedAt = Date.now()
-  writeDiskCache(disk)
+    cacheSet(key, result, TTL.trending)
+    disk.trending = { updatedAt: Date.now(), data: result }
+    disk.updatedAt = Date.now()
+    writeDiskCache(disk)
 
-  return result
+    return result
+  } catch {
+    // If provider is slow/down, serve stale disk cache instead of 500
+    if (diskTrending?.data?.length) return diskTrending.data
+    return []
+  }
 }
 
 export async function searchBooks(topic: string) {
@@ -210,14 +216,19 @@ export async function searchBooks(topic: string) {
     return diskSearch.data
   }
 
-  const j: any = await $fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=10`, { timeout: 5000 })
-  const result = await normalizeItems(j.docs || [])
+  try {
+    const j: any = await $fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=10`, { timeout: 5000 })
+    const result = await normalizeItems(j.docs || [])
 
-  cacheSet(key, result, TTL.search)
-  disk.searches = disk.searches || {}
-  disk.searches[normalized] = { updatedAt: Date.now(), data: result }
-  disk.updatedAt = Date.now()
-  writeDiskCache(disk)
+    cacheSet(key, result, TTL.search)
+    disk.searches = disk.searches || {}
+    disk.searches[normalized] = { updatedAt: Date.now(), data: result }
+    disk.updatedAt = Date.now()
+    writeDiskCache(disk)
 
-  return result
+    return result
+  } catch {
+    if (diskSearch?.data?.length) return diskSearch.data
+    return []
+  }
 }
