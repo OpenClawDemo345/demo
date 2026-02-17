@@ -124,8 +124,12 @@ onMounted(loadTrending)
             </v-col>
             <v-col cols="12" md="8">
               <div class="text-subtitle-1 mb-3">Someone who read this book says these are the 3 main things learned:</div>
-              <v-list lines="three" density="comfortable">
-                <v-list-item v-for="(point, idx) in selected.resume" :key="idx" :title="(idx+1) + '. ' + point" />
+              <v-list density="comfortable">
+                <v-list-item v-for="(point, idx) in selected.resume" :key="idx">
+                  <template #title>
+                    <div class="resume-point">{{ (idx + 1) + '. ' + point }}</div>
+                  </template>
+                </v-list-item>
               </v-list>
             </v-col>
           </v-row>
@@ -182,5 +186,11 @@ onMounted(loadTrending)
   border-radius: 12px;
   border: 1px solid #ddd;
   object-fit: cover;
+}
+.resume-point {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: initial;
+  line-height: 1.45;
 }
 </style>
