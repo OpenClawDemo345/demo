@@ -225,8 +225,14 @@ export async function searchBooks(topic: string) {
   }
 
   try {
-    const j: any = await $fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=10`, { timeout: 5000 })
-    const result = await normalizeItems(j.docs || [])
+    const q = `https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=10`
+    const j: any = await $fetch(q, { timeout: 12000 })
+    let result = await normalizeItems(j.docs || [])
+
+    if (!result.length) {
+      const j2: any = await $fetch(q, { timeout: 12000 })
+      result = await normalizeItems(j2.docs || [])
+    }
 
     cacheSet(key, result, TTL.search)
     disk.searches = disk.searches || {}
