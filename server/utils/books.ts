@@ -188,8 +188,14 @@ export async function getTrendingBooks() {
   }
 
   try {
-    const j: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 5000 })
-    const result = await normalizeItems(j.works || [])
+    const j: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 15000 })
+    let result = await normalizeItems(j.works || [])
+
+    // One retry if provider returned empty/noisy payload
+    if (!result.length) {
+      const j2: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 15000 })
+      result = await normalizeItems(j2.works || [])
+    }
 
     cacheSet(key, result, TTL.trending)
     disk.trending = { updatedAt: Date.now(), data: result }
