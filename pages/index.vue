@@ -64,8 +64,8 @@ onMounted(loadTrending)
           />
         </v-col>
         <v-col cols="12" md="3" class="d-flex ga-2">
-          <v-btn color="primary" size="large" block @click="doSearch" :loading="loading">Search</v-btn>
-          <v-btn color="secondary" variant="tonal" size="large" block @click="loadTrending" :disabled="loading">Trending</v-btn>
+          <v-btn color="red-darken-2" size="large" block @click="doSearch" :loading="loading">Search</v-btn>
+          <v-btn color="red-lighten-1" variant="tonal" size="large" block @click="loadTrending" :disabled="loading">Trending</v-btn>
         </v-col>
       </v-row>
     </v-card>
@@ -75,7 +75,7 @@ onMounted(loadTrending)
         <div class="text-h6">{{ subtitle }}</div>
         <div class="text-medium-emphasis">Click title to open source page • Learn for 3 key insights</div>
       </div>
-      <v-progress-circular indeterminate color="primary" v-if="loading" />
+      <v-progress-circular indeterminate color="red-darken-2" v-if="loading" />
     </div>
 
     <v-card elevation="3" rounded="xl">
@@ -94,11 +94,11 @@ onMounted(loadTrending)
         density="comfortable"
       >
         <template #item.title="{ item }">
-          <a :href="item.link" target="_blank" style="text-decoration:none;color:#1e40af;font-weight:600">{{ item.title }}</a>
+          <a :href="item.link" target="_blank" style="text-decoration:none;color:#b71c1c;font-weight:600">{{ item.title }}</a>
         </template>
 
         <template #item.type="{ item }">
-          <v-chip color="indigo" variant="tonal" size="small">{{ item.type }}</v-chip>
+          <v-chip color="red-darken-1" variant="tonal" size="small">{{ item.type }}</v-chip>
         </template>
 
         <template #item.link="{ item }">
@@ -106,7 +106,7 @@ onMounted(loadTrending)
         </template>
 
         <template #item.learn="{ item }">
-          <v-btn color="success" size="small" rounded="pill" @click="openLearn(item)">Learn</v-btn>
+          <v-btn color="red" size="small" rounded="pill" @click="openLearn(item)">Learn</v-btn>
         </template>
       </v-data-table>
     </v-card>
