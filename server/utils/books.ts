@@ -8,6 +8,29 @@ type Book = {
   resume: string[]
 }
 
+type CacheEntry<T> = { expiresAt: number; value: T }
+const memCache = new Map<string, CacheEntry<any>>()
+
+const TTL = {
+  trending: 10 * 60 * 1000, // 10 min
+  search: 5 * 60 * 1000, // 5 min per topic
+  resume: 24 * 60 * 60 * 1000 // 24h per work
+}
+
+function cacheGet<T>(key: string): T | null {
+  const hit = memCache.get(key)
+  if (!hit) return null
+  if (Date.now() > hit.expiresAt) {
+    memCache.delete(key)
+    return null
+  }
+  return hit.value as T
+}
+
+function cacheSet<T>(key: string, value: T, ttlMs: number) {
+  memCache.set(key, { value, expiresAt: Date.now() + ttlMs })
+}
+
 function classifyType(text = '') {
   const t = text.toLowerCase()
   const has = (...w: string[]) => w.some((x) => t.includes(x))
@@ -32,8 +55,12 @@ function defaultResume(title: string, type: string) {
 }
 
 async function buildResume(workKey: string, title: string, type: string) {
+  const resumeKey = `resume:${workKey}`
+  const cached = cacheGet<string[]>(resumeKey)
+  if (cached) return cached
+
   try {
-    const j: any = await $fetch(`https://openlibrary.org${workKey}.json`)
+    const j: any = await $fetch(`https://openlibrary.org${workKey}.json`, { timeout: 4000 })
     const desc = typeof j.description === 'string' ? j.description : j.description?.value
 
     const points: string[] = []
@@ -52,49 +79,71 @@ async function buildResume(workKey: string, title: string, type: string) {
 
     const fb = defaultResume(title, type)
     while (points.length < 3) points.push(fb[points.length])
-    return points.slice(0, 3)
+    const result = points.slice(0, 3)
+    cacheSet(resumeKey, result, TTL.resume)
+    return result
   } catch {
-    return defaultResume(title, type)
+    const fallback = defaultResume(title, type)
+    cacheSet(resumeKey, fallback, 60 * 60 * 1000) // cache fallback for 1h
+    return fallback
   }
 }
 
 async function normalizeItems(items: any[]): Promise<Book[]> {
-  const out: Book[] = []
+  const base = items
+    .filter((item) => item?.key && item?.title && (Array.isArray(item.author_name) ? item.author_name[0] : item.author_name))
+    .slice(0, 10)
+    .map((item) => {
+      const key = item.key
+      const title = item.title
+      const author = Array.isArray(item.author_name) ? item.author_name[0] : item.author_name
+      const cover = item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-L.jpg` : ''
+      const workKey = key.startsWith('/works/') ? key : String(key).replace('/books/', '/works/')
+      const type = classifyType(`${title} ${JSON.stringify(item)}`)
 
-  for (const item of items) {
-    if (out.length >= 10) break
-
-    const key = item.key
-    const title = item.title
-    const author = Array.isArray(item.author_name) ? item.author_name[0] : item.author_name
-    const cover = item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-L.jpg` : ''
-
-    if (!key || !title || !author) continue
-
-    const workKey = key.startsWith('/works/') ? key : String(key).replace('/books/', '/works/')
-    const type = classifyType(`${title} ${JSON.stringify(item)}`)
-    const resume = await buildResume(workKey, title, type)
-
-    out.push({
-      rank: out.length + 1,
-      title,
-      author,
-      type,
-      link: `https://openlibrary.org${workKey}`,
-      coverUrl: cover,
-      resume
+      return {
+        title,
+        author,
+        type,
+        workKey,
+        link: `https://openlibrary.org${workKey}`,
+        coverUrl: cover
+      }
     })
-  }
 
-  return out
+  // Big speedup: fetch all resume details concurrently instead of sequentially
+  const resumes = await Promise.all(base.map((b) => buildResume(b.workKey, b.title, b.type)))
+
+  return base.map((b, i) => ({
+    rank: i + 1,
+    title: b.title,
+    author: b.author,
+    type: b.type,
+    link: b.link,
+    coverUrl: b.coverUrl,
+    resume: resumes[i]
+  }))
 }
 
 export async function getTrendingBooks() {
-  const j: any = await $fetch('https://openlibrary.org/trending/daily.json')
-  return normalizeItems(j.works || [])
+  const key = 'trending:list'
+  const cached = cacheGet<Book[]>(key)
+  if (cached) return cached
+
+  const j: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 5000 })
+  const result = await normalizeItems(j.works || [])
+  cacheSet(key, result, TTL.trending)
+  return result
 }
 
 export async function searchBooks(topic: string) {
-  const j: any = await $fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=10`)
-  return normalizeItems(j.docs || [])
+  const normalized = topic.trim().toLowerCase()
+  const key = `search:${normalized}`
+  const cached = cacheGet<Book[]>(key)
+  if (cached) return cached
+
+  const j: any = await $fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=10`, { timeout: 5000 })
+  const result = await normalizeItems(j.docs || [])
+  cacheSet(key, result, TTL.search)
+  return result
 }
