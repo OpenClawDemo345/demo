@@ -181,7 +181,8 @@ export async function getTrendingBooks() {
 
   const disk = readDiskCache()
   const diskTrending = disk.trending
-  if (diskTrending && diskTrending.data?.length && Date.now() - diskTrending.updatedAt < TTL.trending) {
+  // Serve disk cache immediately (fast path), even if stale; cron refresh keeps it fresh.
+  if (diskTrending && diskTrending.data?.length) {
     cacheSet(key, diskTrending.data, TTL.trending)
     return diskTrending.data
   }
@@ -211,7 +212,8 @@ export async function searchBooks(topic: string) {
 
   const disk = readDiskCache()
   const diskSearch = disk.searches?.[normalized]
-  if (diskSearch && Date.now() - diskSearch.updatedAt < TTL.search) {
+  // Serve disk cache immediately (fast path), even if stale; cron refresh keeps it fresh.
+  if (diskSearch?.data?.length) {
     cacheSet(key, diskSearch.data, TTL.search)
     return diskSearch.data
   }
