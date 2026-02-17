@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+
 type Book = {
   rank: number
   title: string
@@ -9,11 +12,19 @@ type Book = {
 }
 
 type CacheEntry<T> = { expiresAt: number; value: T }
+type DiskCache = {
+  updatedAt: number
+  trending?: { updatedAt: number; data: Book[] }
+  searches?: Record<string, { updatedAt: number; data: Book[] }>
+  resumes?: Record<string, { updatedAt: number; data: string[] }>
+}
+
 const memCache = new Map<string, CacheEntry<any>>()
+const CACHE_FILE = resolve(process.cwd(), '.cache/books-cache.json')
 
 const TTL = {
-  trending: 10 * 60 * 1000, // 10 min
-  search: 5 * 60 * 1000, // 5 min per topic
+  trending: 60 * 60 * 1000, // 1h
+  search: 60 * 60 * 1000, // 1h per topic
   resume: 24 * 60 * 60 * 1000 // 24h per work
 }
 
@@ -29,6 +40,32 @@ function cacheGet<T>(key: string): T | null {
 
 function cacheSet<T>(key: string, value: T, ttlMs: number) {
   memCache.set(key, { value, expiresAt: Date.now() + ttlMs })
+}
+
+function readDiskCache(): DiskCache {
+  try {
+    if (!existsSync(CACHE_FILE)) return { updatedAt: Date.now(), searches: {}, resumes: {} }
+    const raw = readFileSync(CACHE_FILE, 'utf8')
+    const parsed = JSON.parse(raw)
+    return {
+      updatedAt: parsed.updatedAt || Date.now(),
+      trending: parsed.trending,
+      searches: parsed.searches || {},
+      resumes: parsed.resumes || {}
+    }
+  } catch {
+    return { updatedAt: Date.now(), searches: {}, resumes: {} }
+  }
+}
+
+function writeDiskCache(next: DiskCache) {
+  try {
+    const dir = dirname(CACHE_FILE)
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    writeFileSync(CACHE_FILE, JSON.stringify(next, null, 2), 'utf8')
+  } catch {
+    // ignore disk cache write failures
+  }
 }
 
 function classifyType(text = '') {
@@ -59,6 +96,13 @@ async function buildResume(workKey: string, title: string, type: string) {
   const cached = cacheGet<string[]>(resumeKey)
   if (cached) return cached
 
+  const disk = readDiskCache()
+  const diskResume = disk.resumes?.[workKey]
+  if (diskResume && Date.now() - diskResume.updatedAt < TTL.resume) {
+    cacheSet(resumeKey, diskResume.data, TTL.resume)
+    return diskResume.data
+  }
+
   try {
     const j: any = await $fetch(`https://openlibrary.org${workKey}.json`, { timeout: 4000 })
     const desc = typeof j.description === 'string' ? j.description : j.description?.value
@@ -81,10 +125,16 @@ async function buildResume(workKey: string, title: string, type: string) {
     while (points.length < 3) points.push(fb[points.length])
     const result = points.slice(0, 3)
     cacheSet(resumeKey, result, TTL.resume)
+
+    disk.resumes = disk.resumes || {}
+    disk.resumes[workKey] = { updatedAt: Date.now(), data: result }
+    disk.updatedAt = Date.now()
+    writeDiskCache(disk)
+
     return result
   } catch {
     const fallback = defaultResume(title, type)
-    cacheSet(resumeKey, fallback, 60 * 60 * 1000) // cache fallback for 1h
+    cacheSet(resumeKey, fallback, 60 * 60 * 1000)
     return fallback
   }
 }
@@ -111,7 +161,6 @@ async function normalizeItems(items: any[]): Promise<Book[]> {
       }
     })
 
-  // Big speedup: fetch all resume details concurrently instead of sequentially
   const resumes = await Promise.all(base.map((b) => buildResume(b.workKey, b.title, b.type)))
 
   return base.map((b, i) => ({
@@ -130,9 +179,21 @@ export async function getTrendingBooks() {
   const cached = cacheGet<Book[]>(key)
   if (cached) return cached
 
+  const disk = readDiskCache()
+  const diskTrending = disk.trending
+  if (diskTrending && Date.now() - diskTrending.updatedAt < TTL.trending) {
+    cacheSet(key, diskTrending.data, TTL.trending)
+    return diskTrending.data
+  }
+
   const j: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 5000 })
   const result = await normalizeItems(j.works || [])
+
   cacheSet(key, result, TTL.trending)
+  disk.trending = { updatedAt: Date.now(), data: result }
+  disk.updatedAt = Date.now()
+  writeDiskCache(disk)
+
   return result
 }
 
@@ -142,8 +203,21 @@ export async function searchBooks(topic: string) {
   const cached = cacheGet<Book[]>(key)
   if (cached) return cached
 
+  const disk = readDiskCache()
+  const diskSearch = disk.searches?.[normalized]
+  if (diskSearch && Date.now() - diskSearch.updatedAt < TTL.search) {
+    cacheSet(key, diskSearch.data, TTL.search)
+    return diskSearch.data
+  }
+
   const j: any = await $fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=10`, { timeout: 5000 })
   const result = await normalizeItems(j.docs || [])
+
   cacheSet(key, result, TTL.search)
+  disk.searches = disk.searches || {}
+  disk.searches[normalized] = { updatedAt: Date.now(), data: result }
+  disk.updatedAt = Date.now()
+  writeDiskCache(disk)
+
   return result
 }
