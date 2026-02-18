@@ -107,9 +107,17 @@ async function buildResume(workKey: string, title: string, type: string) {
   }
 }
 
+
+function deriveBookIdFromAny(book: any) {
+  if (book?.bookId) return String(book.bookId)
+  const link = String(book?.link || '')
+  const m = link.match(/\/works\/[^/?#]+/)
+  return m ? m[0] : ''
+}
+
 async function enrichWithRatings(books: Book[]) {
   if (!books.length) return books
-  const ids = books.map((b) => b.bookId)
+  const ids = books.map((b: any) => deriveBookIdFromAny(b)).filter(Boolean)
   const db = await getDb()
   const stats = await db.collection('book_reviews').aggregate([
     { $match: { bookId: { $in: ids } } },
@@ -117,9 +125,11 @@ async function enrichWithRatings(books: Book[]) {
   ]).toArray()
   const byId = new Map(stats.map((s: any) => [String(s._id), s]))
   return books.map((b) => {
-    const s: any = byId.get(b.bookId)
+    const bookId = deriveBookIdFromAny(b)
+    const s: any = byId.get(bookId)
     return {
       ...b,
+      bookId,
       avgRating: s ? Number(s.avgRating.toFixed(1)) : 0,
       ratingsCount: s?.ratingsCount || 0,
       commentsCount: s?.commentsCount || 0
