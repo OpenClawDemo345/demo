@@ -8,12 +8,14 @@
     "start": "nuxt start --host 0.0.0.0 --port 3210"
   },
   "dependencies": {
+    "@mdi/font": "^7.4.47",
+    "jsonwebtoken": "^9.0.3",
+    "mongodb": "^7.1.0",
     "nuxt": "^3.15.4",
-    "vuetify": "^3.7.3",
-    "@mdi/font": "^7.4.47"
+    "vuetify": "^3.7.3"
   },
   "devDependencies": {
-    "vite-plugin-vuetify": "^2.0.4",
-    "sass": "^1.85.1"
+    "sass": "^1.85.1",
+    "vite-plugin-vuetify": "^2.0.4"
   }
 }

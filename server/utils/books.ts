@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { getDb } from './db'
 
 type Book = {
   rank: number
@@ -9,6 +10,10 @@ type Book = {
   link: string
   coverUrl: string
   resume: string[]
+  bookId: string
+  avgRating: number
+  ratingsCount: number
+  commentsCount: number
 }
 
 type CacheEntry<T> = { expiresAt: number; value: T }
@@ -22,50 +27,30 @@ type DiskCache = {
 const memCache = new Map<string, CacheEntry<any>>()
 const CACHE_FILE = resolve(process.cwd(), '.cache/books-cache.json')
 
-const TTL = {
-  trending: 60 * 60 * 1000, // 1h
-  search: 60 * 60 * 1000, // 1h per topic
-  resume: 24 * 60 * 60 * 1000 // 24h per work
-}
+const TTL = { trending: 60 * 60 * 1000, search: 60 * 60 * 1000, resume: 24 * 60 * 60 * 1000 }
 
 function cacheGet<T>(key: string): T | null {
   const hit = memCache.get(key)
   if (!hit) return null
-  if (Date.now() > hit.expiresAt) {
-    memCache.delete(key)
-    return null
-  }
+  if (Date.now() > hit.expiresAt) { memCache.delete(key); return null }
   return hit.value as T
 }
-
-function cacheSet<T>(key: string, value: T, ttlMs: number) {
-  memCache.set(key, { value, expiresAt: Date.now() + ttlMs })
-}
+function cacheSet<T>(key: string, value: T, ttlMs: number) { memCache.set(key, { value, expiresAt: Date.now() + ttlMs }) }
 
 function readDiskCache(): DiskCache {
   try {
     if (!existsSync(CACHE_FILE)) return { updatedAt: Date.now(), searches: {}, resumes: {} }
     const raw = readFileSync(CACHE_FILE, 'utf8')
     const parsed = JSON.parse(raw)
-    return {
-      updatedAt: parsed.updatedAt || Date.now(),
-      trending: parsed.trending,
-      searches: parsed.searches || {},
-      resumes: parsed.resumes || {}
-    }
-  } catch {
-    return { updatedAt: Date.now(), searches: {}, resumes: {} }
-  }
+    return { updatedAt: parsed.updatedAt || Date.now(), trending: parsed.trending, searches: parsed.searches || {}, resumes: parsed.resumes || {} }
+  } catch { return { updatedAt: Date.now(), searches: {}, resumes: {} } }
 }
-
 function writeDiskCache(next: DiskCache) {
   try {
     const dir = dirname(CACHE_FILE)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
     writeFileSync(CACHE_FILE, JSON.stringify(next, null, 2), 'utf8')
-  } catch {
-    // ignore disk cache write failures
-  }
+  } catch {}
 }
 
 function classifyType(text = '') {
@@ -77,17 +62,12 @@ function classifyType(text = '') {
   return 'General'
 }
 
-function splitSentences(s = '') {
-  return s.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean)
-}
-
+function splitSentences(s = '') { return s.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean) }
 function defaultResume(title: string, type: string) {
   return [
     `After reading "${title}", I learned to focus on one core principle and apply it consistently.`,
     'I learned that progress comes from small repeatable actions, not one-time motivation.',
-    type === 'Technical'
-      ? 'I learned to translate ideas into a simple system I can test, measure, and improve.'
-      : 'I learned to reflect on the story/ideas and turn them into concrete decisions in daily life.'
+    type === 'Technical' ? 'I learned to translate ideas into a simple system I can test, measure, and improve.' : 'I learned to reflect on the story/ideas and turn them into concrete decisions in daily life.'
   ]
 }
 
@@ -98,39 +78,27 @@ async function buildResume(workKey: string, title: string, type: string) {
 
   const disk = readDiskCache()
   const diskResume = disk.resumes?.[workKey]
-  if (diskResume && Date.now() - diskResume.updatedAt < TTL.resume) {
-    cacheSet(resumeKey, diskResume.data, TTL.resume)
-    return diskResume.data
-  }
+  if (diskResume && Date.now() - diskResume.updatedAt < TTL.resume) { cacheSet(resumeKey, diskResume.data, TTL.resume); return diskResume.data }
 
   try {
     const j: any = await $fetch(`https://openlibrary.org${workKey}.json`, { timeout: 4000 })
     const desc = typeof j.description === 'string' ? j.description : j.description?.value
-
     const points: string[] = []
     if (desc) {
       for (const s of splitSentences(String(desc))) {
-        if (s.length > 35) {
-          points.push(`After reading it, I learned: ${s.slice(0, 220)}`)
-          if (points.length >= 2) break
-        }
+        if (s.length > 35) { points.push(`After reading it, I learned: ${s.slice(0, 220)}`); if (points.length >= 2) break }
       }
     }
-
-    if (Array.isArray(j.subjects) && j.subjects.length) {
-      points.push(`My key themes from the book are: ${j.subjects.slice(0, 4).join(', ')}.`)
-    }
+    if (Array.isArray(j.subjects) && j.subjects.length) points.push(`My key themes from the book are: ${j.subjects.slice(0, 4).join(', ')}.`)
 
     const fb = defaultResume(title, type)
     while (points.length < 3) points.push(fb[points.length])
     const result = points.slice(0, 3)
     cacheSet(resumeKey, result, TTL.resume)
-
     disk.resumes = disk.resumes || {}
     disk.resumes[workKey] = { updatedAt: Date.now(), data: result }
     disk.updatedAt = Date.now()
     writeDiskCache(disk)
-
     return result
   } catch {
     const fallback = defaultResume(title, type)
@@ -139,73 +107,63 @@ async function buildResume(workKey: string, title: string, type: string) {
   }
 }
 
-async function normalizeItems(items: any[]): Promise<Book[]> {
-  const base = items
-    .filter((item) => item?.key && item?.title && (Array.isArray(item.author_name) ? item.author_name[0] : item.author_name))
-    .slice(0, 10)
-    .map((item) => {
-      const key = item.key
-      const title = item.title
-      const author = Array.isArray(item.author_name) ? item.author_name[0] : item.author_name
-      const cover = item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-L.jpg` : ''
-      const workKey = key.startsWith('/works/') ? key : String(key).replace('/books/', '/works/')
-      const type = classifyType(`${title} ${JSON.stringify(item)}`)
+async function enrichWithRatings(books: Book[]) {
+  if (!books.length) return books
+  const ids = books.map((b) => b.bookId)
+  const db = await getDb()
+  const stats = await db.collection('book_reviews').aggregate([
+    { $match: { bookId: { $in: ids } } },
+    { $group: { _id: '$bookId', avgRating: { $avg: '$rating' }, ratingsCount: { $sum: 1 }, commentsCount: { $sum: { $cond: [{ $gt: [{ $strLenCP: '$comment' }, 0] }, 1, 0] } } } }
+  ]).toArray()
+  const byId = new Map(stats.map((s: any) => [String(s._id), s]))
+  return books.map((b) => {
+    const s: any = byId.get(b.bookId)
+    return {
+      ...b,
+      avgRating: s ? Number(s.avgRating.toFixed(1)) : 0,
+      ratingsCount: s?.ratingsCount || 0,
+      commentsCount: s?.commentsCount || 0
+    }
+  })
+}
 
-      return {
-        title,
-        author,
-        type,
-        workKey,
-        link: `https://openlibrary.org${workKey}`,
-        coverUrl: cover
-      }
-    })
+async function normalizeItems(items: any[]): Promise<Book[]> {
+  const base = items.filter((item) => item?.key && item?.title && (Array.isArray(item.author_name) ? item.author_name[0] : item.author_name)).slice(0, 10).map((item) => {
+    const key = item.key
+    const title = item.title
+    const author = Array.isArray(item.author_name) ? item.author_name[0] : item.author_name
+    const cover = item.cover_i ? `https://covers.openlibrary.org/b/id/${item.cover_i}-L.jpg` : ''
+    const workKey = key.startsWith('/works/') ? key : String(key).replace('/books/', '/works/')
+    const type = classifyType(`${title} ${JSON.stringify(item)}`)
+    return { title, author, type, workKey, link: `https://openlibrary.org${workKey}`, coverUrl: cover }
+  })
 
   const resumes = await Promise.all(base.map((b) => buildResume(b.workKey, b.title, b.type)))
-
-  return base.map((b, i) => ({
-    rank: i + 1,
-    title: b.title,
-    author: b.author,
-    type: b.type,
-    link: b.link,
-    coverUrl: b.coverUrl,
-    resume: resumes[i]
+  const books: Book[] = base.map((b, i) => ({
+    rank: i + 1, title: b.title, author: b.author, type: b.type, link: b.link, coverUrl: b.coverUrl, resume: resumes[i],
+    bookId: b.workKey, avgRating: 0, ratingsCount: 0, commentsCount: 0
   }))
+  return await enrichWithRatings(books)
 }
 
 export async function getTrendingBooks() {
   const key = 'trending:list'
   const cached = cacheGet<Book[]>(key)
-  if (cached) return cached
-
+  if (cached) return await enrichWithRatings(cached)
   const disk = readDiskCache()
   const diskTrending = disk.trending
-  // Serve disk cache immediately (fast path), even if stale; cron refresh keeps it fresh.
-  if (diskTrending && diskTrending.data?.length) {
-    cacheSet(key, diskTrending.data, TTL.trending)
-    return diskTrending.data
-  }
+  if (diskTrending && diskTrending.data?.length) { cacheSet(key, diskTrending.data, TTL.trending); return await enrichWithRatings(diskTrending.data) }
 
   try {
     const j: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 15000 })
     let result = await normalizeItems(j.works || [])
-
-    // One retry if provider returned empty/noisy payload
-    if (!result.length) {
-      const j2: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 15000 })
-      result = await normalizeItems(j2.works || [])
-    }
-
+    if (!result.length) { const j2: any = await $fetch('https://openlibrary.org/trending/daily.json', { timeout: 15000 }); result = await normalizeItems(j2.works || []) }
     cacheSet(key, result, TTL.trending)
     disk.trending = { updatedAt: Date.now(), data: result }
-    disk.updatedAt = Date.now()
-    writeDiskCache(disk)
-
+    disk.updatedAt = Date.now(); writeDiskCache(disk)
     return result
   } catch {
-    // If provider is slow/down, serve stale disk cache instead of 500
-    if (diskTrending?.data?.length) return diskTrending.data
+    if (diskTrending?.data?.length) return await enrichWithRatings(diskTrending.data)
     return []
   }
 }
@@ -214,35 +172,24 @@ export async function searchBooks(topic: string) {
   const normalized = topic.trim().toLowerCase()
   const key = `search:${normalized}`
   const cached = cacheGet<Book[]>(key)
-  if (cached) return cached
+  if (cached) return await enrichWithRatings(cached)
 
   const disk = readDiskCache()
   const diskSearch = disk.searches?.[normalized]
-  // Serve disk cache immediately (fast path), even if stale; cron refresh keeps it fresh.
-  if (diskSearch?.data?.length) {
-    cacheSet(key, diskSearch.data, TTL.search)
-    return diskSearch.data
-  }
+  if (diskSearch?.data?.length) { cacheSet(key, diskSearch.data, TTL.search); return await enrichWithRatings(diskSearch.data) }
 
   try {
     const q = `https://openlibrary.org/search.json?q=${encodeURIComponent(topic)}&limit=10`
     const j: any = await $fetch(q, { timeout: 12000 })
     let result = await normalizeItems(j.docs || [])
-
-    if (!result.length) {
-      const j2: any = await $fetch(q, { timeout: 12000 })
-      result = await normalizeItems(j2.docs || [])
-    }
-
+    if (!result.length) { const j2: any = await $fetch(q, { timeout: 12000 }); result = await normalizeItems(j2.docs || []) }
     cacheSet(key, result, TTL.search)
     disk.searches = disk.searches || {}
     disk.searches[normalized] = { updatedAt: Date.now(), data: result }
-    disk.updatedAt = Date.now()
-    writeDiskCache(disk)
-
+    disk.updatedAt = Date.now(); writeDiskCache(disk)
     return result
   } catch {
-    if (diskSearch?.data?.length) return diskSearch.data
+    if (diskSearch?.data?.length) return await enrichWithRatings(diskSearch.data)
     return []
   }
 }
