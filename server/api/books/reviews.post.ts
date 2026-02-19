@@ -24,22 +24,42 @@ export default defineEventHandler(async (event) => {
   if (!user) throw createError({ statusCode: 401, statusMessage: 'User not found' })
   if (user.enabled === false) throw createError({ statusCode: 403, statusMessage: 'Account disabled' })
 
-  await db.collection('book_reviews').updateOne(
-    { bookId, userId: user._id },
-    {
-      $set: {
-        title,
-        author,
-        rating,
-        comment,
-        userName: user.name || user.email,
-        updatedAt: new Date()
-      },
-      $setOnInsert: { createdAt: new Date() }
-    },
-    { upsert: true }
-  )
+  let effectiveRating = 0
 
-  await logAction(String(user._id), user.email, 'review', { bookId, title, rating, hasComment: !!comment })
+  if (rating > 0) {
+    effectiveRating = rating
+    await db.collection('book_reviews').updateOne(
+      { bookId, userId: user._id },
+      {
+        $set: {
+          title,
+          author,
+          rating,
+          userName: user.name || user.email,
+          updatedAt: new Date()
+        },
+        $setOnInsert: { createdAt: new Date() }
+      },
+      { upsert: true }
+    )
+  } else {
+    const existing: any = await db.collection('book_reviews').findOne({ bookId, userId: user._id })
+    effectiveRating = Number(existing?.rating || 0)
+  }
+
+  if (comment) {
+    await db.collection('book_comments').insertOne({
+      bookId,
+      title,
+      author,
+      comment,
+      userId: user._id,
+      userName: user.name || user.email,
+      ratingSnapshot: effectiveRating,
+      createdAt: new Date()
+    })
+  }
+
+  await logAction(String(user._id), user.email, 'review', { bookId, title, rating: effectiveRating, hasComment: !!comment })
   return { ok: true }
 })

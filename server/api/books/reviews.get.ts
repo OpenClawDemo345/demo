@@ -7,21 +7,29 @@ export default defineEventHandler(async (event) => {
   if (!bookId) throw createError({ statusCode: 400, statusMessage: 'Missing bookId' })
 
   const db = await getDb()
-  const items = await db.collection('book_reviews')
+  const comments = await db.collection('book_comments')
     .find({ bookId }, { projection: { _id: 0, userId: 0 } })
-    .sort({ updatedAt: -1 })
+    .sort({ createdAt: -1 })
     .limit(100)
     .toArray()
 
-  let myReview: any = null
+  let myRating = 0
   const token: any = readToken(event)
   if (token?.uid && ObjectId.isValid(token.uid)) {
-    const mine = await db.collection('book_reviews').findOne(
+    const mine: any = await db.collection('book_reviews').findOne(
       { bookId, userId: new ObjectId(token.uid) },
-      { projection: { _id: 0, userId: 0 } }
+      { projection: { _id: 0, rating: 1 } }
     )
-    if (mine) myReview = mine
+    myRating = Number(mine?.rating || 0)
   }
 
-  return { reviews: items, myReview }
+  return {
+    reviews: comments.map((c: any) => ({
+      userName: c.userName,
+      rating: Number(c.ratingSnapshot || 0),
+      comment: c.comment,
+      createdAt: c.createdAt
+    })),
+    myRating
+  }
 })
