@@ -119,11 +119,16 @@ async function enrichWithRatings(books: Book[]) {
   if (!books.length) return books
   const ids = books.map((b: any) => deriveBookIdFromAny(b)).filter(Boolean)
   const db = await getDb()
-  const stats = await db.collection('book_reviews').aggregate([
+  const ratingStats = await db.collection('book_reviews').aggregate([
     { $match: { bookId: { $in: ids } } },
-    { $group: { _id: '$bookId', avgRating: { $avg: '$rating' }, ratingsCount: { $sum: 1 }, commentsCount: { $sum: { $cond: [{ $gt: [{ $strLenCP: '$comment' }, 0] }, 1, 0] } } } }
+    { $group: { _id: '$bookId', avgRating: { $avg: '$rating' }, ratingsCount: { $sum: { $cond: [{ $gt: ['$rating', 0] }, 1, 0] } } } }
   ]).toArray()
-  const byId = new Map(stats.map((s: any) => [String(s._id), s]))
+  const commentStats = await db.collection('book_comments').aggregate([
+    { $match: { bookId: { $in: ids } } },
+    { $group: { _id: '$bookId', commentsCount: { $sum: 1 } } }
+  ]).toArray()
+  const byId = new Map(ratingStats.map((s: any) => [String(s._id), s]))
+  const commentsById = new Map(commentStats.map((s: any) => [String(s._id), Number(s.commentsCount || 0)]))
   return books.map((b) => {
     const bookId = deriveBookIdFromAny(b)
     const s: any = byId.get(bookId)
@@ -132,7 +137,7 @@ async function enrichWithRatings(books: Book[]) {
       bookId,
       avgRating: s ? Number(s.avgRating.toFixed(1)) : 0,
       ratingsCount: s?.ratingsCount || 0,
-      commentsCount: s?.commentsCount || 0
+      commentsCount: commentsById.get(bookId) || 0
     }
   })
 }

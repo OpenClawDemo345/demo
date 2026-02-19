@@ -9,6 +9,8 @@ const me = ref<any>(null)
 const review = ref({ rating: 0 as number, comment: '' })
 const reviews = ref<any[]>([])
 const reviewMsg = ref('')
+const itemsPerPage = ref(10)
+const perPageOptions = [10, 25, 50, 100]
 const headers = computed(() => [
   { title:'#', key:'rank', width:60 },{ title:t('title'), key:'title' },{ title:t('author'), key:'author' },
   { title:t('summary'), key:'resume', sortable:false },{ title:t('stars'), key:'avgRating', width:120 },
@@ -68,7 +70,7 @@ onMounted(async () => { await Promise.all([refreshMe(), loadTrending()]) })
       <div class="text-caption">{{ subtitle }}</div>
     </v-card>
 
-    <v-data-table :items="books" :headers="headers">
+    <v-data-table :items="books" :headers="headers" v-model:items-per-page="itemsPerPage" :items-per-page-options="perPageOptions">
       <template #item.title="{ item }"><a :href="item.link" target="_blank">{{ item.title }}</a></template>
       <template #item.resume="{ item }"><div class="text-caption">{{ item.resume?.[0] }}</div></template>
       <template #item.avgRating="{ item }">{{ item.avgRating || 0 }} ⭐ ({{ item.ratingsCount || 0 }})</template>

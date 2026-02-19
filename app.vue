@@ -3,10 +3,17 @@ const me = ref<any>(null)
 const status = ref<any>({ db: '...' })
 const showCookieBanner = ref(false)
 const { locale, t } = useUi()
+
 const languageItems = [
-  { title: '🇬🇧 EN', value: 'en' }, { title: '🇷🇴 RO', value: 'ro' }, { title: '🇫🇷 FR', value: 'fr' },
-  { title: '🇮🇹 IT', value: 'it' }, { title: '🇭🇺 HU', value: 'hu' }, { title: '🇩🇪 DE', value: 'de' }
+  { title: 'EN', value: 'en', flag: 'https://flagcdn.com/w20/gb.png' },
+  { title: 'RO', value: 'ro', flag: 'https://flagcdn.com/w20/ro.png' },
+  { title: 'FR', value: 'fr', flag: 'https://flagcdn.com/w20/fr.png' },
+  { title: 'IT', value: 'it', flag: 'https://flagcdn.com/w20/it.png' },
+  { title: 'HU', value: 'hu', flag: 'https://flagcdn.com/w20/hu.png' },
+  { title: 'DE', value: 'de', flag: 'https://flagcdn.com/w20/de.png' }
 ]
+const selectedLanguage = computed(() => languageItems.find((x) => x.value === locale.value) || languageItems[0])
+
 watch(locale, () => { if (process.client) localStorage.setItem('ui_locale', locale.value) })
 
 async function refreshGlobal() {
@@ -37,7 +44,21 @@ onMounted(async () => {
         <strong class="text-truncate" style="max-width: 120px;">talks123 Books</strong>
       </NuxtLink>
       <v-spacer />
-      <v-select v-model="locale" :items="languageItems" density="compact" variant="underlined" hide-details style="max-width:86px" class="mr-1" />
+
+      <v-select v-model="locale" :items="languageItems" item-title="title" item-value="value" density="compact" variant="underlined" hide-details style="max-width:110px" class="mr-1">
+        <template #selection>
+          <div class="d-flex align-center">
+            <img :src="selectedLanguage.flag" alt="flag" style="width:16px;height:12px" class="mr-1" />
+            <span>{{ selectedLanguage.title }}</span>
+          </div>
+        </template>
+        <template #item="{ props, item }">
+          <v-list-item v-bind="props" :title="item.raw.title">
+            <template #prepend><img :src="item.raw.flag" alt="flag" style="width:16px;height:12px" /></template>
+          </v-list-item>
+        </template>
+      </v-select>
+
       <v-chip size="x-small" :color="status.db === 'up' ? 'green' : 'orange'" variant="tonal" class="mr-1">DB {{ status.db }}</v-chip>
       <v-btn size="small" variant="tonal" to="/preferences" class="mr-1 d-none d-sm-inline-flex">{{ t('theme') }}</v-btn>
       <v-btn size="small" variant="tonal" icon="mdi-cog" to="/preferences" class="mr-1 d-inline-flex d-sm-none" />
