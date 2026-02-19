@@ -38,7 +38,7 @@ async function fetchReviews() {
   if (!selected.value?.bookId) return
   const r:any = await $fetch(`/api/books/reviews?bookId=${encodeURIComponent(selected.value.bookId)}`)
   reviews.value = r.reviews || []
-  if (r?.myReview) review.value = { rating: Number(r.myReview.rating || 0), comment: String(r.myReview.comment || '') }
+  review.value = { rating: Number(r?.myRating || 0), comment: '' }
 }
 
 

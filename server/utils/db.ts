@@ -14,6 +14,7 @@ export async function getDb() {
   await db.collection('users').createIndex({ email: 1 }, { unique: true })
   await db.collection('book_reviews').createIndex({ bookId: 1, createdAt: -1 })
   await db.collection('book_reviews').createIndex({ bookId: 1, userId: 1 }, { unique: true })
+  await db.collection('book_comments').createIndex({ bookId: 1, createdAt: -1 })
   await db.collection('password_resets').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   await db.collection('user_logs').createIndex({ userId: 1, createdAt: -1 })
   await db.collection('admin_settings').createIndex({ key: 1 }, { unique: true })
