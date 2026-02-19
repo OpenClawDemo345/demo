@@ -9,6 +9,14 @@ const info = ref('')
 const username = ref('admin')
 const password = ref('admin')
 const newAdminPassword = ref('')
+const config = useRuntimeConfig()
+const siteKey = config.public.turnstileSiteKey
+const captchaToken = ref('')
+
+onMounted(() => {
+  ;(window as any).onAdminCaptchaOk = (token: string) => { captchaToken.value = token }
+  ;(window as any).onAdminCaptchaExpired = () => { captchaToken.value = '' }
+})
 
 async function refreshAdmin() {
   try { admin.value = (await $fetch<any>('/api/admin/me')).admin } catch { admin.value = null }
@@ -20,7 +28,7 @@ async function refreshUsers() {
 async function adminLogin() {
   err.value = ''; info.value = ''
   try {
-    const res = await $fetch<any>('/api/admin/login', { method: 'POST', body: { username: username.value, password: password.value } })
+    const res = await $fetch<any>('/api/admin/login', { method: 'POST', body: { username: username.value, password: password.value, captchaToken: captchaToken.value } })
     admin.value = res.admin
     await refreshUsers()
   } catch (e:any) { err.value = e?.data?.statusMessage || 'Login failed' }
@@ -78,6 +86,9 @@ onMounted(async () => {
     <v-card v-if="!admin" max-width="520" class="pa-4">
       <v-text-field v-model="username" label="Admin username" />
       <v-text-field v-model="password" label="Admin password" type="password" @keydown.enter="adminLogin" />
+      <div v-if="siteKey" class="mb-3">
+      <div class="cf-turnstile" :data-sitekey="siteKey" data-action="admin-login" data-callback="onAdminCaptchaOk" data-expired-callback="onAdminCaptchaExpired" />
+    </div>
       <v-btn color="red" @click="adminLogin">Login</v-btn>
       <div class="text-caption mt-2">Default first login: admin / admin</div>
     </v-card>

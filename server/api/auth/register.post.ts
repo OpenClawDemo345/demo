@@ -1,12 +1,15 @@
 import { getDb } from '../../utils/db'
 import { hashPassword, issueToken, setAuthCookie } from '../../utils/auth'
 import { logAction } from '../../utils/audit'
+import { verifyTurnstile } from '../../utils/turnstile'
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{ name?: string; email?: string; password?: string }>(event)
+  const body = await readBody<{ name?: string; email?: string; password?: string; captchaToken?: string }>(event)
   const name = String(body?.name || '').trim()
   const email = String(body?.email || '').trim().toLowerCase()
   const password = String(body?.password || '')
+
+  await verifyTurnstile(event, String(body?.captchaToken || ''), 'register')
 
   if (!email || !password || password.length < 8) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid registration data' })
