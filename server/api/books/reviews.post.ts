@@ -21,23 +21,17 @@ export default defineEventHandler(async (event) => {
   const user: any = await db.collection('users').findOne({ _id: new ObjectId(token.uid) })
   if (!user) throw createError({ statusCode: 401, statusMessage: 'User not found' })
 
-  await db.collection('book_reviews').updateOne(
-    { bookId, userId: user._id },
-    {
-      $set: {
-        bookId,
-        title,
-        author,
-        rating,
-        comment,
-        userId: user._id,
-        userName: user.name || user.email,
-        updatedAt: new Date()
-      },
-      $setOnInsert: { createdAt: new Date() }
-    },
-    { upsert: true }
-  )
+  await db.collection('book_reviews').insertOne({
+    bookId,
+    title,
+    author,
+    rating,
+    comment,
+    userId: user._id,
+    userName: user.name || user.email,
+    createdAt: new Date(),
+    updatedAt: new Date()
+  })
 
   return { ok: true }
 })
