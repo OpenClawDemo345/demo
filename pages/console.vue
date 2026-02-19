@@ -89,6 +89,7 @@ onMounted(async () => {
       <div v-if="siteKey" class="mb-3">
       <div class="cf-turnstile" :data-sitekey="siteKey" data-action="admin-login" data-callback="onAdminCaptchaOk" data-expired-callback="onAdminCaptchaExpired" />
     </div>
+      <div v-else class="text-caption mb-3" style="color:#b71c1c">Captcha is not configured yet (TURNSTILE_SITE_KEY missing).</div>
       <v-btn color="red" @click="adminLogin">Login</v-btn>
       <div class="text-caption mt-2">Default first login: admin / admin</div>
     </v-card>

@@ -29,6 +29,7 @@ async function submit() {
     <div v-if="siteKey" class="mb-3">
       <div class="cf-turnstile" :data-sitekey="siteKey" data-action="forgot-password" data-callback="onForgotCaptchaOk" data-expired-callback="onForgotCaptchaExpired" />
     </div>
+    <div v-else class="text-caption mb-3" style="color:#b71c1c">Captcha is not configured yet (TURNSTILE_SITE_KEY missing).</div>
     <v-btn color="red" @click="submit">{{ t('generateReset') }}</v-btn>
     <div class="mt-4 text-body-2"><NuxtLink to="/login">{{ t('login') }}</NuxtLink> · <NuxtLink to="/register">{{ t('createAccount') }}</NuxtLink></div>
   </v-container>
