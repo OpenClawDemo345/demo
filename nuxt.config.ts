@@ -1,6 +1,11 @@
 import vuetify from 'vite-plugin-vuetify'
 
 export default defineNuxtConfig({
+  app: {
+    head: {
+      link: [{ rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }]
+    }
+  },
   ssr: true,
   css: ['vuetify/styles', '@mdi/font/css/materialdesignicons.css'],
   build: { transpile: ['vuetify'] },

@@ -39,7 +39,7 @@ onMounted(async () => {
       <v-spacer />
       <v-select v-model="locale" :items="languageItems" density="compact" variant="underlined" hide-details style="max-width:86px" class="mr-1" />
       <v-chip size="x-small" :color="status.db === 'up' ? 'green' : 'orange'" variant="tonal" class="mr-1">DB {{ status.db }}</v-chip>
-      <v-btn size="small" variant="tonal" to="/preferences" class="mr-1 d-none d-sm-inline-flex">Prefs</v-btn>
+      <v-btn size="small" variant="tonal" to="/preferences" class="mr-1 d-none d-sm-inline-flex">{{ t('theme') }}</v-btn>
       <v-btn size="small" variant="tonal" icon="mdi-cog" to="/preferences" class="mr-1 d-inline-flex d-sm-none" />
       <template v-if="me">
         <span class="mr-2 d-none d-sm-inline text-caption" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ me.email }}</span>
