@@ -15,5 +15,7 @@ export async function getDb() {
   await db.collection('book_reviews').createIndex({ bookId: 1, createdAt: -1 })
   try { await db.collection('book_reviews').dropIndex('bookId_1_userId_1') } catch {}
   await db.collection('password_resets').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+  await db.collection('user_logs').createIndex({ userId: 1, createdAt: -1 })
+  await db.collection('admin_settings').createIndex({ key: 1 }, { unique: true })
   return db
 }

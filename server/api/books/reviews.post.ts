@@ -1,6 +1,7 @@
 import { ObjectId } from 'mongodb'
 import { getDb } from '../../utils/db'
 import { readToken } from '../../utils/auth'
+import { logAction } from '../../utils/audit'
 
 export default defineEventHandler(async (event) => {
   const token: any = readToken(event)
@@ -20,6 +21,7 @@ export default defineEventHandler(async (event) => {
   const db = await getDb()
   const user: any = await db.collection('users').findOne({ _id: new ObjectId(token.uid) })
   if (!user) throw createError({ statusCode: 401, statusMessage: 'User not found' })
+  if (user.enabled === false) throw createError({ statusCode: 403, statusMessage: 'Account disabled' })
 
   await db.collection('book_reviews').insertOne({
     bookId,
@@ -33,5 +35,6 @@ export default defineEventHandler(async (event) => {
     updatedAt: new Date()
   })
 
+  await logAction(String(user._id), user.email, 'review', { bookId, title, rating, hasComment: !!comment })
   return { ok: true }
 })

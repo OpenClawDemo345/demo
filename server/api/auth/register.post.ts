@@ -1,5 +1,6 @@
 import { getDb } from '../../utils/db'
 import { hashPassword, issueToken, setAuthCookie } from '../../utils/auth'
+import { logAction } from '../../utils/audit'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ name?: string; email?: string; password?: string }>(event)
@@ -21,6 +22,7 @@ export default defineEventHandler(async (event) => {
     name: name || email.split('@')[0],
     passwordHash: hashPassword(password),
     providers: [],
+    enabled: true,
     createdAt: now,
     updatedAt: now
   }
@@ -28,5 +30,6 @@ export default defineEventHandler(async (event) => {
   const res = await db.collection('users').insertOne(user)
   const token = issueToken({ uid: String(res.insertedId), email, name: user.name })
   setAuthCookie(event, token)
+  await logAction(String(res.insertedId), email, 'register')
   return { ok: true, user: { id: String(res.insertedId), email, name: user.name } }
 })

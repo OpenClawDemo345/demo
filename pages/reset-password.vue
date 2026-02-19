@@ -20,7 +20,6 @@ async function submit() {
     <h2 class="mb-4">Reset password</h2>
     <v-alert v-if="err" type="error" class="mb-3">{{ err }}</v-alert>
     <v-alert v-if="msg" type="success" class="mb-3">{{ msg }}</v-alert>
-    <v-text-field v-model="token" label="Token" />
     <v-text-field v-model="password" label="New password (min 8)" type="password" @keydown.enter="submit" />
     <v-btn color="red" @click="submit">Reset password</v-btn>
   </v-container>

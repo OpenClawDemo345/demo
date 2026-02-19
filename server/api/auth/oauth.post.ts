@@ -1,5 +1,6 @@
 import { getDb } from '../../utils/db'
 import { issueToken, setAuthCookie } from '../../utils/auth'
+import { logAction } from '../../utils/audit'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ provider?: string; providerId?: string; email?: string; name?: string }>(event)
@@ -19,10 +20,12 @@ export default defineEventHandler(async (event) => {
       email,
       name: name || email.split('@')[0],
       providers: [{ provider, providerId }],
+      enabled: true,
       createdAt: now,
       updatedAt: now
     })
     user = await db.collection('users').findOne({ _id: ins.insertedId })
+    await logAction(String(ins.insertedId), email, 'register', { provider })
   } else {
     const providers = Array.isArray(user.providers) ? user.providers : []
     if (!providers.find((p: any) => p.provider === provider && p.providerId === providerId)) {
@@ -32,7 +35,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  if (user.enabled === false) {
+    throw createError({ statusCode: 403, statusMessage: 'Account disabled' })
+  }
+
   const token = issueToken({ uid: String(user._id), email: user.email, name: user.name })
   setAuthCookie(event, token)
+  await logAction(String(user._id), user.email, 'login', { provider })
   return { ok: true, user: { id: String(user._id), email: user.email, name: user.name, providers: user.providers || [] } }
 })
