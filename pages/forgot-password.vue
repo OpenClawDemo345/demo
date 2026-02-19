@@ -6,8 +6,8 @@ const err = ref('')
 async function submit() {
   err.value = ''; msg.value = ''
   try {
-    const r:any = await $fetch('/api/auth/forgot-password', { method: 'POST', body: { email: email.value } })
-    msg.value = r.resetToken ? `Reset token (demo): ${r.resetToken}` : 'If account exists, reset was generated.'
+    await $fetch('/api/auth/forgot-password', { method: 'POST', body: { email: email.value } })
+    msg.value = 'If account exists, a reset email was sent.'
   } catch (e:any) { err.value = e?.data?.statusMessage || t('requestFailed') }
 }
 </script>
